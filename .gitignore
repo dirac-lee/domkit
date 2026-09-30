@@ -1,0 +1,20 @@
+# IDE / editor
+.trae/
+.idea/
+.vscode/
+
+# macOS
+.DS_Store
+
+# Go build outputs
+bin/
+dist/
+*.test
+*.out
+coverage.out
+
+# Logs / temporary files
+*.log
+tmp/
+temp/
+
