@@ -1,0 +1,371 @@
+example/order/internal/order/wiring.go
+  s_aabf1c09040c6d::t_acdb745d4ff23d 5-6,38-39,52,74-76,79,86,89,92,100,102-120,123-124,126-129,180 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6abe0944ff31764793161807","tool_type":"agent","tool_id":"apply_patch","line_ranges":[{"Range":[5,6]},{"Range":[38,39]},{"Single":52},{"Range":[74,76]},{"Single":79},{"Single":86},{"Single":89},{"Single":92},{"Single":100},{"Range":[102,120]},{"Range":[123,124]},{"Range":[126,129]},{"Single":180}]}]}
+  s_aabf1c09040c6d::t_486f17f79fb667 7,121-122,125 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6abe095aff31764793161843","tool_type":"agent","tool_id":"apply_patch","line_ranges":[{"Single":7},{"Range":[121,122]},{"Single":125}]}]}
+example/order/cmd/orderserver/main.go
+  s_aabf1c09040c6d::t_1e93cf844f25ce 8,46-58,61,78,85,88,92 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6abe094fff31764793161825","tool_type":"agent","tool_id":"apply_patch","line_ranges":[{"Single":8},{"Range":[46,58]},{"Single":61},{"Single":78},{"Single":85},{"Single":88},{"Single":92}]}]}
+example/order/internal/order/infra/mysql/db.go
+  s_aabf1c09040c6d::t_3781949dd3f425 36-47 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6abe08ffff317647931617e8","tool_type":"agent","tool_id":"apply_patch","line_ranges":[{"Range":[36,47]}]}]}
+example/order/internal/order/wiring_test.go
+  s_aabf1c09040c6d::t_5a883b4696b62a 5,48-93 gitai:{"mixed_line_ranges":[],"operations":[{"operation_id":"6abe0961ff31764793161861","tool_type":"agent","tool_id":"apply_patch","line_ranges":[{"Single":5},{"Range":[48,93]}]}]}
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.2",
+  "base_commit_sha": "a251645ebf1298d5d3769b4ce85c59878986b5c7",
+  "prompts": {},
+  "sessions": {
+    "s_aabf1c09040c6d": {
+      "agent_id": {
+        "tool": "trae",
+        "id": "6abd27f4ff317647931608a9",
+        "model": "gpt-5.5__dev"
+      },
+      "human_author": "liming.dirac <liming.dirac@bytedance.com>"
+    }
+  },
+  "attestation_metadata": {
+    "example/order/cmd/orderserver/main.go": [
+      {
+        "hash": "s_aabf1c09040c6d::t_1e93cf844f25ce",
+        "line_ranges": [
+          {
+            "Single": 8
+          },
+          {
+            "Range": [
+              46,
+              58
+            ]
+          },
+          {
+            "Single": 61
+          },
+          {
+            "Single": 78
+          },
+          {
+            "Single": 85
+          },
+          {
+            "Single": 88
+          },
+          {
+            "Single": 92
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6abe094fff31764793161825",
+            "tool_type": "agent",
+            "tool_id": "apply_patch",
+            "line_ranges": [
+              {
+                "Single": 8
+              },
+              {
+                "Range": [
+                  46,
+                  58
+                ]
+              },
+              {
+                "Single": 61
+              },
+              {
+                "Single": 78
+              },
+              {
+                "Single": 85
+              },
+              {
+                "Single": 88
+              },
+              {
+                "Single": 92
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "example/order/internal/order/infra/mysql/db.go": [
+      {
+        "hash": "s_aabf1c09040c6d::t_3781949dd3f425",
+        "line_ranges": [
+          {
+            "Range": [
+              36,
+              47
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6abe08ffff317647931617e8",
+            "tool_type": "agent",
+            "tool_id": "apply_patch",
+            "line_ranges": [
+              {
+                "Range": [
+                  36,
+                  47
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "example/order/internal/order/wiring.go": [
+      {
+        "hash": "s_aabf1c09040c6d::t_acdb745d4ff23d",
+        "line_ranges": [
+          {
+            "Range": [
+              5,
+              6
+            ]
+          },
+          {
+            "Range": [
+              38,
+              39
+            ]
+          },
+          {
+            "Single": 52
+          },
+          {
+            "Range": [
+              74,
+              76
+            ]
+          },
+          {
+            "Single": 79
+          },
+          {
+            "Single": 86
+          },
+          {
+            "Single": 89
+          },
+          {
+            "Single": 92
+          },
+          {
+            "Single": 100
+          },
+          {
+            "Range": [
+              102,
+              120
+            ]
+          },
+          {
+            "Range": [
+              123,
+              124
+            ]
+          },
+          {
+            "Range": [
+              126,
+              129
+            ]
+          },
+          {
+            "Single": 180
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6abe0944ff31764793161807",
+            "tool_type": "agent",
+            "tool_id": "apply_patch",
+            "line_ranges": [
+              {
+                "Range": [
+                  5,
+                  6
+                ]
+              },
+              {
+                "Range": [
+                  38,
+                  39
+                ]
+              },
+              {
+                "Single": 52
+              },
+              {
+                "Range": [
+                  74,
+                  76
+                ]
+              },
+              {
+                "Single": 79
+              },
+              {
+                "Single": 86
+              },
+              {
+                "Single": 89
+              },
+              {
+                "Single": 92
+              },
+              {
+                "Single": 100
+              },
+              {
+                "Range": [
+                  102,
+                  120
+                ]
+              },
+              {
+                "Range": [
+                  123,
+                  124
+                ]
+              },
+              {
+                "Range": [
+                  126,
+                  129
+                ]
+              },
+              {
+                "Single": 180
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "hash": "s_aabf1c09040c6d::t_486f17f79fb667",
+        "line_ranges": [
+          {
+            "Single": 7
+          },
+          {
+            "Range": [
+              121,
+              122
+            ]
+          },
+          {
+            "Single": 125
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6abe095aff31764793161843",
+            "tool_type": "agent",
+            "tool_id": "apply_patch",
+            "line_ranges": [
+              {
+                "Single": 7
+              },
+              {
+                "Range": [
+                  121,
+                  122
+                ]
+              },
+              {
+                "Single": 125
+              }
+            ]
+          }
+        ]
+      }
+    ],
+    "example/order/internal/order/wiring_test.go": [
+      {
+        "hash": "s_aabf1c09040c6d::t_5a883b4696b62a",
+        "line_ranges": [
+          {
+            "Single": 5
+          },
+          {
+            "Range": [
+              48,
+              93
+            ]
+          }
+        ],
+        "mixed_line_ranges": [],
+        "operations": [
+          {
+            "operation_id": "6abe0961ff31764793161861",
+            "tool_type": "agent",
+            "tool_id": "apply_patch",
+            "line_ranges": [
+              {
+                "Single": 5
+              },
+              {
+                "Range": [
+                  48,
+                  93
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "remote_transcripts": {
+    "s_aabf1c09040c6d": {
+      "tool": "trae",
+      "conversation_id": "6abd27f4ff317647931608a9",
+      "session_id": "6abd27f4ff317647931608a9",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    },
+    "s_aabf1c09040c6d::t_1e93cf844f25ce": {
+      "tool": "trae",
+      "conversation_id": "6abd27f4ff317647931608a9",
+      "session_id": "6abd27f4ff317647931608a9",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    },
+    "s_aabf1c09040c6d::t_3781949dd3f425": {
+      "tool": "trae",
+      "conversation_id": "6abd27f4ff317647931608a9",
+      "session_id": "6abd27f4ff317647931608a9",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    },
+    "s_aabf1c09040c6d::t_486f17f79fb667": {
+      "tool": "trae",
+      "conversation_id": "6abd27f4ff317647931608a9",
+      "session_id": "6abd27f4ff317647931608a9",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    },
+    "s_aabf1c09040c6d::t_5a883b4696b62a": {
+      "tool": "trae",
+      "conversation_id": "6abd27f4ff317647931608a9",
+      "session_id": "6abd27f4ff317647931608a9",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    },
+    "s_aabf1c09040c6d::t_acdb745d4ff23d": {
+      "tool": "trae",
+      "conversation_id": "6abd27f4ff317647931608a9",
+      "session_id": "6abd27f4ff317647931608a9",
+      "status": "remote_only",
+      "message": "Remote transcript resolution is not implemented yet for TRAE prompts."
+    }
+  }
+}
