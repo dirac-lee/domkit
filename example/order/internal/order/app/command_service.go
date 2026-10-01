@@ -47,7 +47,7 @@ func NewTransactionalOrderCommandService(
 	repo domain.Repository[orderdomain.OrderID, orderdomain.Order],
 ) *OrderCommandService {
 	return &OrderCommandService{
-		Exec: application.NewTxCommandExecutor(tm, application.PropagationRequired, newUoW),
+		Exec: application.MustNewTxCommandExecutor(tm, application.PropagationRequired, newUoW),
 		Repo: repo,
 		IDs:  ids,
 	}

@@ -1,6 +1,16 @@
 package application
 
-import "context"
+import (
+	"context"
+	"errors"
+)
+
+var (
+	// ErrNilTransactionManager reports a missing transaction manager.
+	ErrNilTransactionManager = errors.New("application: transaction manager is nil")
+	// ErrNilTxFunc reports a missing transaction callback.
+	ErrNilTxFunc = errors.New("application: transaction function is nil")
+)
 
 // Propagation 事务传播行为（技术无关，由基础设施模块解释执行）。
 type Propagation uint8
@@ -26,6 +36,12 @@ type TransactionManager interface {
 func InTx[R any](ctx context.Context, tm TransactionManager, p Propagation,
 	fn func(ctx context.Context, tx any) (R, error)) (R, error) {
 	var result R
+	if tm == nil {
+		return result, ErrNilTransactionManager
+	}
+	if fn == nil {
+		return result, ErrNilTxFunc
+	}
 	err := tm.DoInTx(ctx, p, func(ctx context.Context, tx any) error {
 		r, e := fn(ctx, tx)
 		result = r

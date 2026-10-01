@@ -7,6 +7,9 @@ import (
 	"github.com/dirac-lee/domkit/domain"
 )
 
+// ErrNilUnitOfWorkFactory reports a missing transactional unit-of-work factory.
+var ErrNilUnitOfWorkFactory = errors.New("application: unit of work factory is nil")
+
 // aggregatePtr 命令执行器对聚合指针的约束：*T 且满足 domain.Aggregate 最小能力。
 // 约束本身与主键类型无关，主键 ID 由各泛型方法单独绑定。
 type aggregatePtr[T any] interface {
@@ -55,8 +58,23 @@ func NewCommandExecutor(dispatcher EventDispatcher) *CommandExecutor {
 
 // NewTxCommandExecutor 创建事务执行器：在 tm 开启的事务内由 newUoW(tx) 构造工作单元
 // 并提交；传播行为通常用 PropagationRequired。outbox 等场景用它保证聚合与消息同事务。
-func NewTxCommandExecutor(tm TransactionManager, p Propagation, newUoW TxUnitOfWorkFactory) *CommandExecutor {
-	return &CommandExecutor{mode: persistTransactional, tm: tm, prop: p, newUoW: newUoW}
+func NewTxCommandExecutor(tm TransactionManager, p Propagation, newUoW TxUnitOfWorkFactory) (*CommandExecutor, error) {
+	if tm == nil {
+		return nil, ErrNilTransactionManager
+	}
+	if newUoW == nil {
+		return nil, ErrNilUnitOfWorkFactory
+	}
+	return &CommandExecutor{mode: persistTransactional, tm: tm, prop: p, newUoW: newUoW}, nil
+}
+
+// MustNewTxCommandExecutor creates a transactional executor and panics on invalid dependencies.
+func MustNewTxCommandExecutor(tm TransactionManager, p Propagation, newUoW TxUnitOfWorkFactory) *CommandExecutor {
+	exec, err := NewTxCommandExecutor(tm, p, newUoW)
+	if err != nil {
+		panic(err)
+	}
+	return exec
 }
 
 // Execute 执行命令：

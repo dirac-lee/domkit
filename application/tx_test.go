@@ -54,13 +54,23 @@ func TestInTxReturnsValueAndCommits(t *testing.T) {
 
 func TestInTxRollsBackOnCallbackError(t *testing.T) {
 	tm := &countingTxManager{}
-	_, err := InTx[int](context.Background(), tm, PropagationRequiresNew,
+	_, err := InTx(context.Background(), tm, PropagationRequiresNew,
 		func(context.Context, any) (int, error) { return 0, errBoom })
 	if !errors.Is(err, errBoom) {
 		t.Fatalf("expected errBoom, got %v", err)
 	}
 	if tm.commits != 0 || tm.rollbacks != 1 || tm.lastProp != PropagationRequiresNew {
 		t.Fatalf("expected rollback with REQUIRES_NEW: %+v", tm)
+	}
+}
+
+func TestInTxRejectsNilDependencies(t *testing.T) {
+	if _, err := InTx(context.Background(), nil, PropagationRequired,
+		func(context.Context, any) (int, error) { return 1, nil }); !errors.Is(err, ErrNilTransactionManager) {
+		t.Fatalf("expected ErrNilTransactionManager, got %v", err)
+	}
+	if _, err := InTx[int](context.Background(), NoopTxManager{}, PropagationRequired, nil); !errors.Is(err, ErrNilTxFunc) {
+		t.Fatalf("expected ErrNilTxFunc, got %v", err)
 	}
 }
 
@@ -83,7 +93,7 @@ func TestTxCommandExecutorRunsUoWInsideTransaction(t *testing.T) {
 	tm := &countingTxManager{}
 	repo := &fakeRepo{}
 	var seenTx any
-	exec := NewTxCommandExecutor(tm, PropagationRequired,
+	exec := MustNewTxCommandExecutor(tm, PropagationRequired,
 		func(tx any) domain.UnitOfWork {
 			seenTx = tx
 			return NewSimpleUnitOfWork(nil)
@@ -110,7 +120,7 @@ func TestTxCommandExecutorRunsUoWInsideTransaction(t *testing.T) {
 func TestTxCommandExecutorRollsBackOnPersistFailure(t *testing.T) {
 	tm := &countingTxManager{}
 	repo := &fakeRepo{failOn: "insert"}
-	exec := NewTxCommandExecutor(tm, PropagationRequired,
+	exec := MustNewTxCommandExecutor(tm, PropagationRequired,
 		func(any) domain.UnitOfWork { return NewSimpleUnitOfWork(nil) })
 
 	_, err := exec.Execute(context.Background(), newAggregate("a1"), repo,
@@ -121,4 +131,24 @@ func TestTxCommandExecutorRollsBackOnPersistFailure(t *testing.T) {
 	if tm.commits != 0 || tm.rollbacks != 1 {
 		t.Fatalf("failed persist must roll back tx: %+v", tm)
 	}
+}
+
+func TestNewTxCommandExecutorRejectsNilDependencies(t *testing.T) {
+	newUoW := func(any) domain.UnitOfWork { return NewSimpleUnitOfWork(nil) }
+	if _, err := NewTxCommandExecutor(nil, PropagationRequired, newUoW); !errors.Is(err, ErrNilTransactionManager) {
+		t.Fatalf("expected ErrNilTransactionManager, got %v", err)
+	}
+	if _, err := NewTxCommandExecutor(NoopTxManager{}, PropagationRequired, nil); !errors.Is(err, ErrNilUnitOfWorkFactory) {
+		t.Fatalf("expected ErrNilUnitOfWorkFactory, got %v", err)
+	}
+}
+
+func TestMustNewTxCommandExecutorPanicsOnInvalidDependencies(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic for invalid dependencies")
+		}
+	}()
+	_ = MustNewTxCommandExecutor(nil, PropagationRequired,
+		func(any) domain.UnitOfWork { return NewSimpleUnitOfWork(nil) })
 }
