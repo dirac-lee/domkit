@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"io"
 	"log"
 	"net/http"
 
@@ -9,6 +10,8 @@ import (
 	"github.com/dirac-lee/domkit/example/order/internal/order/app"
 	orderdomain "github.com/dirac-lee/domkit/example/order/internal/order/domain"
 )
+
+const maxRequestBodyBytes = 1 << 20 // 1 MiB，防止异常大请求体占用过多内存。
 
 // orderHandler 入站适配器：把 HTTP 请求翻译成对应用用例（Commands/Payments）的调用。
 type orderHandler struct {
@@ -43,7 +46,7 @@ type createOrderRequest struct {
 func (h *orderHandler) create(w http.ResponseWriter, r *http.Request) {
 	var req createOrderRequest
 	// 请求体非法：返回 400，不进入应用层。
-	if err := decodeJSON(r, &req); err != nil {
+	if err := decodeJSON(w, r, &req); err != nil {
 		writeError(w, errBadRequest)
 		return
 	}
@@ -107,9 +110,19 @@ func pathOrderID(r *http.Request) orderdomain.OrderID {
 	return orderdomain.OrderID(r.PathValue("id"))
 }
 
-// decodeJSON 解析请求体，并拒绝未知字段，避免误传参数被静默忽略。
-func decodeJSON(r *http.Request, dst any) error {
+// decodeJSON 解析请求体：限制大小、拒绝空 body、未知字段与尾随内容。
+func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) error {
+	r.Body = http.MaxBytesReader(w, r.Body, maxRequestBodyBytes)
 	dec := json.NewDecoder(r.Body)
 	dec.DisallowUnknownFields()
-	return dec.Decode(dst)
+	if err := dec.Decode(dst); err != nil {
+		return err
+	}
+
+	// 再读一次，确保 body 中只有一个 JSON 值；若还能解出内容或遇到非 EOF 错误，都视为非法请求。
+	var extra struct{}
+	if err := dec.Decode(&extra); err != io.EOF {
+		return errBadRequest
+	}
+	return nil
 }
