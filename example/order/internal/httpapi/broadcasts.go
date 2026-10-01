@@ -19,7 +19,7 @@ type broadcastDTO struct {
 // broadcasts 返回指定订单已发送的对外广播消息（本演示中由支付触发）。
 func (h *orderHandler) broadcasts(w http.ResponseWriter, r *http.Request) {
 	// 信使按字符串聚合 ID 建索引，路径强类型 ID 需归一为 string。
-	records, err := h.app.Broadcasts.ByAggregate(string(pathOrderID(r)))
+	records, err := h.app.Broadcasts.ByAggregate(r.Context(), string(pathOrderID(r)))
 	if err != nil {
 		writeError(w, err)
 		return

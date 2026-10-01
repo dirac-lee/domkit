@@ -65,9 +65,9 @@ func contextWithDefaultTimeout(ctx context.Context, timeout time.Duration) (cont
 }
 
 // ByAggregate 按聚合 ID 时间序回查广播记录；无记录返回空切片。
-func (m *BroadcastMessenger) ByAggregate(aggregateID string) ([]messenger.Record, error) {
+func (m *BroadcastMessenger) ByAggregate(ctx context.Context, aggregateID string) ([]messenger.Record, error) {
 	var pos []BroadcastRecordPO
-	err := m.db.WithContext(context.Background()).
+	err := m.db.WithContext(ctx).
 		Where("aggregate_id = ?", aggregateID).Order("id").Find(&pos).Error
 	if err != nil {
 		return nil, fmt.Errorf("mysql: query broadcasts %q failed: %w", aggregateID, err)

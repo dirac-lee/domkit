@@ -24,7 +24,7 @@ type OrderSummaryStore interface {
 // BroadcastStore 对外信使契约：可发送信封并按聚合回查留痕。
 type BroadcastStore interface {
 	broadcast.Messenger
-	ByAggregate(aggregateID string) ([]messenger.Record, error)
+	ByAggregate(ctx context.Context, aggregateID string) ([]messenger.Record, error)
 }
 
 // SummaryCache 详情缓存契约（cache-aside）：读时回填、写后失效。

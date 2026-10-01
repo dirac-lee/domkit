@@ -25,7 +25,7 @@ func TestPaymentBroadcastsEnvelope(t *testing.T) {
 	}
 
 	// 2. 创建事件不广播，支付后应恰有 1 条（若创建也广播会得到 2 条）。
-	records, err := app.Broadcasts.ByAggregate(string(o.ID))
+	records, err := app.Broadcasts.ByAggregate(ctx, string(o.ID))
 	if err != nil {
 		t.Fatalf("查询广播记录失败: %v", err)
 	}

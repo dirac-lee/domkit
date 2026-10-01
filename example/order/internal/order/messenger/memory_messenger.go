@@ -43,7 +43,7 @@ func (m *MemoryMessenger) Send(_ context.Context, topic, senderCode, envelope st
 }
 
 // ByAggregate 返回指定聚合已发送消息的副本；无消息时返回空切片（非 nil）。
-func (m *MemoryMessenger) ByAggregate(aggregateID string) ([]Record, error) {
+func (m *MemoryMessenger) ByAggregate(_ context.Context, aggregateID string) ([]Record, error) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
 
