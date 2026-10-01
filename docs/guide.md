@@ -22,6 +22,7 @@
 ```bash
 cd example/order
 make up                 # 拉起 MySQL :3306 + Redis :6379
+make ps                 # 查看依赖健康状态
 ```
 
 MySQL 首次启动约需 20~30 秒初始化，**请等两个容器都变为 healthy 再启动服务**，否则可能抢跑连不上库：
@@ -499,6 +500,7 @@ docker info | grep -A4 "Registry Mirrors"   # 确认已生效
 ```bash
 cd example/order
 make up          # 拉起 MySQL :3306 + Redis :6379（首次会拉取镜像）
+make ps          # 等两个服务均为 healthy
 make run         # 等价 go run ./cmd/orderserver；首次启动自动建表
 # order server listening on :8080
 ```
@@ -517,10 +519,20 @@ go test -race ./...
 
 ```bash
 make test               # 纯单元测试：全内存装配，不依赖容器
-make test-integration   # -tags=integration：真实 MySQL + Redis 端到端
+make test-integration   # GOWORK=off + -tags=integration：真实 MySQL + Redis 端到端
 ```
 
-> 集成测试启动前会探测 MySQL/Redis，探测不到则该批用例 `SKIP`（而非失败）；可用环境变量 `ORDER_TEST_MYSQL_DSN`、`ORDER_TEST_REDIS_ADDR` 指向远端实例。
+推荐流程：
+
+```bash
+cd example/order
+make up
+make ps
+make test-integration
+make reset              # 或 make down，按需保留数据卷
+```
+
+> 集成测试启动前会探测 MySQL/Redis，探测不到则该批用例 `SKIP`（而非失败）；可用环境变量 `ORDER_TEST_MYSQL_DSN`、`ORDER_TEST_REDIS_ADDR` 指向远端实例。`make test-integration` 固定使用 `GOWORK=off`，确保示例作为独立 Go module 也能通过。
 
 测试覆盖：框架各主要包配备单元测试——领域模型与规则、命令执行器（含失败与事务路径）、配置转换/绑定/开关、出域广播各阶段错误分类、读副本与分页、对账状态与自愈、ACL 错误分类与幂等、事件总线优先级/异步重试死信、Outbox 认领与中继、内存仓储乐观锁与发号器等。示例纯单测经全内存装配验证对账自愈、支付广播、取消规则；`integration/` 另验证缓存回填与写后失效、重复支付 409、outbox 状态流转、广播落库。
 

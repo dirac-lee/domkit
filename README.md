@@ -98,6 +98,7 @@ err: <nil> done: true version: 1
 ```bash
 cd example/order
 make up
+make ps                 # 等 MySQL / Redis 均为 healthy
 make run
 ```
 
@@ -115,7 +116,7 @@ curl -s 'localhost:8080/orders'
 
 ```bash
 make test
-make test-integration
+make test-integration   # GOWORK=off，按 example/order 独立模块运行
 make reset
 ```
 
@@ -181,4 +182,3 @@ make test
 ## 项目状态
 
 domkit 处于早期演进阶段，API 仍可能根据真实业务使用反馈调整。当前仓库尚未声明许可证；对外正式复用前建议补充 `LICENSE` 并打 tag 发布版本。
-

@@ -1,8 +1,12 @@
-.PHONY: up down reset test test-integration tidy run
+.PHONY: up ps down reset test test-integration tidy run
 
 # 启动 MySQL + Redis 依赖
 up:
 	docker compose up -d
+
+# 查看本地依赖健康状态
+ps:
+	docker compose ps
 
 # 停止并删除容器（保留数据卷）
 down:
@@ -18,10 +22,10 @@ test:
 
 # 集成测试（需先 make up，连接真实 MySQL + Redis）
 test-integration:
-	go test -tags=integration ./...
+	GOWORK=off go test -tags=integration ./... -count=1
 
 tidy:
-	go mod tidy
+	GOWORK=off go mod tidy
 
 run:
 	go run ./cmd/orderserver
