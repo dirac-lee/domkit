@@ -55,6 +55,10 @@ func NewApplication(cfg *config.Context) (*Application, error) {
 	if err != nil {
 		return nil, err
 	}
+	err = options.Validate()
+	if err != nil {
+		return nil, err
+	}
 
 	// 真实 MySQL：连接 → AutoMigrate 建表。
 	db, err := mysql.Open(options.MySQLDSN)
