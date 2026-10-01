@@ -106,6 +106,7 @@ func createOrder(t *testing.T, env *testEnv) string {
 	if !ok || id == "" {
 		t.Fatalf("响应 data 缺少有效 id: %v", body)
 	}
+	t.Cleanup(func() { env.cleanupOrderData(t, id) })
 	return id
 }
 

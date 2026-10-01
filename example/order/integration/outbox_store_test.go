@@ -17,8 +17,7 @@ import (
 
 func TestMySQLOutboxStoreClaimPending(t *testing.T) {
 	env := setupMySQLOutboxStore(t)
-	prefix := uniqueOutboxPrefix()
-	t.Cleanup(func() { cleanupOutboxMessages(t, env.db, prefix) })
+	prefix := env.newOutboxPrefix(t)
 	now := time.Now()
 
 	seedOutboxMessages(t, env.db,
@@ -45,8 +44,7 @@ func TestMySQLOutboxStoreClaimPending(t *testing.T) {
 
 func TestMySQLOutboxStoreStateTransitions(t *testing.T) {
 	env := setupMySQLOutboxStore(t)
-	prefix := uniqueOutboxPrefix()
-	t.Cleanup(func() { cleanupOutboxMessages(t, env.db, prefix) })
+	prefix := env.newOutboxPrefix(t)
 	now := time.Now().Add(-2 * time.Minute)
 
 	seedOutboxMessages(t, env.db,
@@ -77,8 +75,7 @@ func TestMySQLOutboxStoreStateTransitions(t *testing.T) {
 
 func TestMySQLOutboxStoreClaimLost(t *testing.T) {
 	env := setupMySQLOutboxStore(t)
-	prefix := uniqueOutboxPrefix()
-	t.Cleanup(func() { cleanupOutboxMessages(t, env.db, prefix) })
+	prefix := env.newOutboxPrefix(t)
 	now := time.Now().Add(-2 * time.Minute)
 
 	seedOutboxMessages(t, env.db,
@@ -113,8 +110,20 @@ func setupMySQLOutboxStore(t *testing.T) mysqlOutboxEnv {
 	return mysqlOutboxEnv{db: db, store: ordermysql.NewOutboxStore(db)}
 }
 
-func uniqueOutboxPrefix() string {
-	return fmt.Sprintf("it-outbox-%d-", time.Now().UnixNano())
+func (e mysqlOutboxEnv) newOutboxPrefix(t *testing.T) string {
+	t.Helper()
+
+	prefix := fmt.Sprintf("it-outbox-%d-", time.Now().UnixNano())
+	t.Cleanup(func() { e.cleanupOutboxPrefix(t, prefix) })
+	return prefix
+}
+
+func (e mysqlOutboxEnv) cleanupOutboxPrefix(t *testing.T, prefix string) {
+	t.Helper()
+
+	if err := e.db.Where("id LIKE ?", prefix+"%").Delete(&ordermysql.OutboxMessagePO{}).Error; err != nil {
+		t.Errorf("清理 outbox 测试数据失败: %v", err)
+	}
 }
 
 func seedOutboxMessages(t *testing.T, db *gorm.DB, rows ...ordermysql.OutboxMessagePO) {
@@ -178,13 +187,5 @@ func assertOutboxSentAt(t *testing.T, db *gorm.DB, id string) {
 	}
 	if po.SentAt == nil || po.SentAt.IsZero() {
 		t.Fatalf("outbox %q sent_at should be set", id)
-	}
-}
-
-func cleanupOutboxMessages(t *testing.T, db *gorm.DB, prefix string) {
-	t.Helper()
-
-	if err := db.Where("id LIKE ?", prefix+"%").Delete(&ordermysql.OutboxMessagePO{}).Error; err != nil {
-		t.Fatalf("清理 outbox 测试数据失败: %v", err)
 	}
 }

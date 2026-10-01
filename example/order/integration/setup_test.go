@@ -29,6 +29,7 @@ import (
 	"github.com/dirac-lee/domkit/config"
 	"github.com/dirac-lee/domkit/example/order/internal/httpapi"
 	"github.com/dirac-lee/domkit/example/order/internal/order"
+	ordermysql "github.com/dirac-lee/domkit/example/order/internal/order/infra/mysql"
 )
 
 // 默认连接串：与 docker-compose 暴露的端口/账号一致，可用环境变量覆盖。
@@ -61,10 +62,46 @@ func setup(t *testing.T) *testEnv {
 	rdb := probeRedis(t, redisAddr)
 
 	app := newRealApplication(t, dsn, redisAddr)
+	t.Cleanup(func() {
+		if err := app.Close(); err != nil {
+			t.Errorf("关闭应用失败: %v", err)
+		}
+	})
 	server := httptest.NewServer(httpapi.NewRouter(app, log.Default()))
 	t.Cleanup(server.Close)
 
 	return &testEnv{app: app, gorm: gdb, redis: rdb, server: server}
+}
+
+func (e *testEnv) cleanupOrderData(t *testing.T, id string) {
+	t.Helper()
+
+	// 清理顺序从派生数据到主表，避免后续增加外键时产生约束问题。
+	operations := []struct {
+		name string
+		run  func() error
+	}{
+		{"Redis summary", func() error {
+			return e.redis.Del(context.Background(), "summary:"+id).Err()
+		}},
+		{"broadcast records", func() error {
+			return e.gorm.Where("aggregate_id = ?", id).Delete(&ordermysql.BroadcastRecordPO{}).Error
+		}},
+		{"outbox messages", func() error {
+			return e.gorm.Where("aggregate_id = ?", id).Delete(&ordermysql.OutboxMessagePO{}).Error
+		}},
+		{"order summaries", func() error {
+			return e.gorm.Where("id = ?", id).Delete(&ordermysql.OrderSummaryPO{}).Error
+		}},
+		{"orders", func() error {
+			return e.gorm.Where("id = ?", id).Delete(&ordermysql.OrderPO{}).Error
+		}},
+	}
+	for _, op := range operations {
+		if err := op.run(); err != nil {
+			t.Errorf("清理 %s 失败: %v", op.name, err)
+		}
+	}
 }
 
 // probeMySQL 打开独立连接并 Ping；不可达时 Skip。连接交由测试结束时关闭。
