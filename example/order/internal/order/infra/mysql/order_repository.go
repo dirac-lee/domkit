@@ -91,7 +91,11 @@ func (r *OrderRepository) GetByID(ctx context.Context, id orderdomain.OrderID) (
 	if err != nil {
 		return nil, fmt.Errorf("mysql: get order %q failed: %w", id, err)
 	}
-	return poToOrder(&po), nil
+	o, err := poToOrder(&po)
+	if err != nil {
+		return nil, fmt.Errorf("mysql: map order %q failed: %w", id, err)
+	}
+	return o, nil
 }
 
 // CurrentVersion 只查版本列，供对账与乐观锁失败时定位实际版本。
@@ -133,9 +137,13 @@ func toOrderPO(o *orderdomain.Order) OrderPO {
 	}
 }
 
-// poToOrder PO → 聚合：重建一个「已持久化、无待提交瞬态」的聚合，
+// poToOrder PO → 聚合：重建一个「已持久化、无待提交瞬态」的聚合。
 // 并补回规则/操作注册表，使装载出的聚合同样可执行后续业务行为。
-func poToOrder(po *OrderPO) *orderdomain.Order {
+func poToOrder(po *OrderPO) (*orderdomain.Order, error) {
+	status, err := statusFromValue(po.Status)
+	if err != nil {
+		return nil, err
+	}
 	o := &orderdomain.Order{
 		AggregateRoot: domain.AggregateRoot[orderdomain.OrderID]{
 			ID:        orderdomain.OrderID(po.ID),
@@ -144,22 +152,23 @@ func poToOrder(po *OrderPO) *orderdomain.Order {
 		},
 		OrderNo: po.OrderNo,
 		Amount:  po.Amount,
-		Status:  statusFromValue(po.Status),
+		Status:  status,
 	}
 	o.MarkPersisted(po.Version)
 	o.SetRuleRegistry(orderdomain.OrderRuleRegistry)
 	o.SetOperationRegistry(orderdomain.OrderOperationRegistry)
-	return o
+	return o, nil
 }
 
-// statusFromValue 状态编码 → 富枚举；引用枚举自身的 Value() 做比较，避免裸字符串漂移。
-func statusFromValue(value string) orderdomain.OrderStatus {
+// statusFromValue 状态编码 → 富枚举；未知状态直接报错，避免坏数据静默降级。
+func statusFromValue(value string) (orderdomain.OrderStatus, error) {
 	switch value {
+	case orderdomain.StatusCreated.Value():
+		return orderdomain.StatusCreated, nil
 	case orderdomain.StatusPaid.Value():
-		return orderdomain.StatusPaid
+		return orderdomain.StatusPaid, nil
 	case orderdomain.StatusCancelled.Value():
-		return orderdomain.StatusCancelled
-	default:
-		return orderdomain.StatusCreated
+		return orderdomain.StatusCancelled, nil
 	}
+	return orderdomain.OrderStatus{}, fmt.Errorf("unknown order status %q", value)
 }
