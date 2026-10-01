@@ -19,7 +19,7 @@ func newTestApplication(t *testing.T) *Application {
 	repo := newMemoryOrderRepo()
 	replica := memorySummaryStore{
 		MemoryReplica: readmodel.NewMemoryReplica(
-			"memory:order-summary", loadFromMemoryRepo(repo), orderdomain.ProjectOrderSummary,
+			"memory:order-summary", loadOrderFromRepo(repo), orderdomain.ProjectOrderSummary,
 		),
 	}
 	deps := orderDeps{
@@ -42,21 +42,6 @@ func newTestApplication(t *testing.T) *Application {
 // newMemoryOrderRepo 创建内存订单仓储。
 func newMemoryOrderRepo() *persist.MemoryRepository[orderdomain.OrderID, orderdomain.Order] {
 	return persist.NewAggregateRepository(func(o *orderdomain.Order) orderdomain.OrderID { return o.ID })
-}
-
-// loadFromMemoryRepo 内存仓储加载器，未命中翻译为 ErrAggregateNotFound。
-func loadFromMemoryRepo(repo *persist.MemoryRepository[orderdomain.OrderID, orderdomain.Order],
-) func(context.Context, orderdomain.OrderID) (*orderdomain.Order, error) {
-	return func(ctx context.Context, id orderdomain.OrderID) (*orderdomain.Order, error) {
-		o, err := repo.GetByID(ctx, id)
-		if err != nil {
-			return nil, err
-		}
-		if o == nil {
-			return nil, readmodel.ErrAggregateNotFound
-		}
-		return o, nil
-	}
 }
 
 // memorySummaryStore 把框架内存副本适配为带 error 的读侧契约。

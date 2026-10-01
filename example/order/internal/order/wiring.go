@@ -61,7 +61,8 @@ func NewApplication(cfg *config.Context) (*Application, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := mysql.Migrate(db); err != nil {
+	err = mysql.Migrate(db)
+	if err != nil {
 		return nil, err
 	}
 
@@ -134,9 +135,9 @@ func assembleApplication(options *Options, deps orderDeps) (*Application, error)
 	}, nil
 }
 
-// loadOrderFromRepo 构造投影副本的写模型加载器；仓储未命中翻译为 ErrAggregateNotFound，
-// 供副本清理残留条目。
-func loadOrderFromRepo(repo *mysql.OrderRepository,
+// loadOrderFromRepo 构造投影副本的写模型加载器；只依赖仓储端口。
+// 仓储未命中翻译为 ErrAggregateNotFound，供副本清理残留条目。
+func loadOrderFromRepo(repo domain.Repository[orderdomain.OrderID, orderdomain.Order],
 ) func(context.Context, orderdomain.OrderID) (*orderdomain.Order, error) {
 	return func(ctx context.Context, id orderdomain.OrderID) (*orderdomain.Order, error) {
 		o, err := repo.GetByID(ctx, id)
