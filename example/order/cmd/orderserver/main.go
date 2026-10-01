@@ -1,8 +1,12 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"log"
 	"net/http"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/dirac-lee/domkit/config"
@@ -32,8 +36,44 @@ func main() {
 		Addr:              app.Options.HTTPAddr,
 		Handler:           httpapi.NewRouter(app, log.Default()),
 		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      10 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 
 	log.Printf("order server listening on %s", server.Addr)
-	log.Fatal(server.ListenAndServe())
+	runServer(server)
+}
+
+func runServer(server *http.Server) {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	errCh := make(chan error, 1)
+	go func() {
+		// ListenAndServe 在 Shutdown 后会返回 ErrServerClosed，这是正常退出路径。
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			errCh <- err
+			return
+		}
+		errCh <- nil
+	}()
+
+	select {
+	case err := <-errCh:
+		if err != nil {
+			log.Fatalf("order server failed: %v", err)
+		}
+	case <-ctx.Done():
+		log.Print("order server shutting down")
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			log.Fatalf("order server shutdown failed: %v", err)
+		}
+		if err := <-errCh; err != nil {
+			log.Fatalf("order server stopped with error: %v", err)
+		}
+		log.Print("order server stopped")
+	}
 }
