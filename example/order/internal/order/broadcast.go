@@ -1,7 +1,6 @@
 package order
 
 import (
-	"context"
 	"time"
 
 	"github.com/dirac-lee/domkit/broadcast"
@@ -43,7 +42,9 @@ func buildOrderPaidNotice(
 	repo domain.Repository[orderdomain.OrderID, orderdomain.Order],
 ) (OrderPaidNotice, error) {
 	id := orderdomain.OrderID(evt.AggregateKey())
-	o, err := repo.GetByID(context.Background(), id)
+	ctx, cancel := postCommitContext()
+	defer cancel()
+	o, err := repo.GetByID(ctx, id)
 	if err != nil {
 		return OrderPaidNotice{}, err
 	}

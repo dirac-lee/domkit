@@ -47,7 +47,8 @@ func (s *instantOutboxStore) SaveMessage(ctx context.Context, tx any, msg *outbo
 // publishInstant 还原事件 → 发布 → 标记 sent。
 // 消息体损坏直接进死信；发布失败保留 pending，交 Relay 过宽限期后重投。
 func (s *instantOutboxStore) publishInstant(msg outbox.OutboxMessage) error {
-	ctx := context.Background()
+	ctx, cancel := postCommitContext()
+	defer cancel()
 
 	evt, err := s.serializer.Deserialize(msg.Payload, msg.EventName)
 	if err != nil {
@@ -59,7 +60,7 @@ func (s *instantOutboxStore) publishInstant(msg outbox.OutboxMessage) error {
 	}
 
 	if err := s.publisher.Publish(ctx, evt); err != nil {
-		// 状态保持 pending：Relay 兜底，此处错误供提交钩子聚合记录。
+		// 状态保持 pending：Relay 兜底，此处错误只会被提交后钩子记录。
 		return fmt.Errorf("order: instant publish %q failed: %w", msg.ID, err)
 	}
 	if err := s.inner.MarkSent(ctx, msg.ID, instantToken); err != nil {

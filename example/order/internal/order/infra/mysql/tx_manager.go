@@ -2,7 +2,7 @@ package mysql
 
 import (
 	"context"
-	"errors"
+	"log"
 
 	"github.com/dirac-lee/domkit/application"
 	"gorm.io/gorm"
@@ -38,8 +38,8 @@ func (m *GormTxManager) DoInTx(ctx context.Context, p application.Propagation,
 	return m.runNewTx(ctx, fn)
 }
 
-// runNewTx 开一个新事务：随事务建立独立的提交后钩子收集器，
-// 事务提交成功后统一执行钩子；任一步失败都不会触发钩子。
+// runNewTx 开一个新事务：随事务建立独立的提交后钩子收集器。
+// 事务提交成功后统一执行钩子；钩子失败只记录日志，不改变已提交命令的返回结果。
 func (m *GormTxManager) runNewTx(ctx context.Context, fn func(context.Context, any) error) error {
 	hooks := newTxHooks()
 	ctx = contextWithHooks(ctx, hooks)
@@ -51,8 +51,9 @@ func (m *GormTxManager) runNewTx(ctx context.Context, fn func(context.Context, a
 	if err != nil {
 		return err
 	}
-	// 事务已落库：执行「提交成功后」动作（如即时发布事件）。
-	return hooks.runAfterCommit()
+	// 事务已落库：提交后动作失败不能回滚主事务，交 outbox/relay 兜底。
+	hooks.runAfterCommit()
+	return nil
 }
 
 // DBOrTx 取出 ctx 中的事务句柄，无事务时回退基础连接。
@@ -69,7 +70,9 @@ func DBOrTx(ctx context.Context, db *gorm.DB) *gorm.DB {
 func OnAfterCommit(ctx context.Context, fn func() error) {
 	hooks, ok := ctx.Value(hooksCtxKey{}).(*txHooks)
 	if !ok {
-		_ = fn()
+		if err := fn(); err != nil {
+			log.Printf("mysql: after-commit hook failed outside transaction: %v", err)
+		}
 		return
 	}
 	hooks.add(fn)
@@ -104,12 +107,12 @@ func (h *txHooks) add(fn func() error) {
 	h.afterCommit = append(h.afterCommit, fn)
 }
 
-// runAfterCommit 依次执行钩子并聚合错误：此时主事务已提交无法回滚，
+// runAfterCommit 依次执行钩子：此时主事务已提交无法回滚，
 // 失败的事件仍留在 outbox（status=pending），由 Relay 扫描兜底。
-func (h *txHooks) runAfterCommit() error {
-	var joined error
+func (h *txHooks) runAfterCommit() {
 	for _, fn := range h.afterCommit {
-		joined = errors.Join(joined, fn())
+		if err := fn(); err != nil {
+			log.Printf("mysql: after-commit hook failed: %v", err)
+		}
 	}
-	return joined
 }

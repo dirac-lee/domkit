@@ -98,7 +98,9 @@ func assembleApplication(options *Options, deps orderDeps) (*Application, error)
 	// 2. 生命周期事件 → 投影 + 缓存失效订阅。
 	project := eventbus.FuncHandler(func(evt domain.DomainEvent) error {
 		id := orderdomain.OrderID(evt.AggregateKey())
-		return syncSummaryAndInvalidate(context.Background(), id, deps.summary, deps.cache)
+		ctx, cancel := postCommitContext()
+		defer cancel()
+		return syncSummaryAndInvalidate(ctx, id, deps.summary, deps.cache)
 	})
 	for _, eventName := range []string{"order.created", "order.paid", "order.cancelled"} {
 		bus.Subscribe(eventName, "order-summary-projector", project, 0)

@@ -4,11 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/dirac-lee/domkit/broadcast"
 	"github.com/dirac-lee/domkit/example/order/internal/order/messenger"
 	"gorm.io/gorm"
 )
+
+const broadcastWriteTimeout = 3 * time.Second
 
 // envelopeHead 仅解析信封顶部的路由字段：聚合 ID 与版本。
 type envelopeHead struct {
@@ -32,6 +35,9 @@ var _ broadcast.Messenger = (*BroadcastMessenger)(nil)
 
 // Send 解析信封路由字段并落库一条广播记录。
 func (m *BroadcastMessenger) Send(ctx context.Context, topic, senderCode, envelope string) error {
+	ctx, cancel := contextWithDefaultTimeout(ctx, broadcastWriteTimeout)
+	defer cancel()
+
 	head, err := parseEnvelopeHead(envelope)
 	if err != nil {
 		return fmt.Errorf("mysql: parse broadcast envelope failed: %w", err)
@@ -48,6 +54,14 @@ func (m *BroadcastMessenger) Send(ctx context.Context, topic, senderCode, envelo
 		return fmt.Errorf("mysql: persist broadcast record failed: %w", err)
 	}
 	return nil
+}
+
+// contextWithDefaultTimeout 为未设置 deadline 的调用补上默认超时，避免后台发送无限等待。
+func contextWithDefaultTimeout(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
+	if _, ok := ctx.Deadline(); ok {
+		return ctx, func() {}
+	}
+	return context.WithTimeout(ctx, timeout)
 }
 
 // ByAggregate 按聚合 ID 时间序回查广播记录；无记录返回空切片。
