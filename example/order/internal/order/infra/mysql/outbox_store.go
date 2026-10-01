@@ -62,8 +62,12 @@ func (s *OutboxStore) ClaimPending(ctx context.Context, batchSize int,
 // MarkSent 在本 token 持有下置为 sent；丢失认领返回 ErrClaimLost。
 func (s *OutboxStore) MarkSent(ctx context.Context, id, token string) error {
 	res := s.db.WithContext(ctx).Model(&OutboxMessagePO{}).
-		Where("id = ? AND claim_token = ?", id, token).
-		Updates(map[string]any{"status": outbox.StatusSent, "sent_at": time.Now()})
+		Where("id = ? AND claim_token = ? AND status = ?", id, token, outbox.StatusProcessing).
+		Updates(map[string]any{
+			"status":      outbox.StatusSent,
+			"claim_token": "",
+			"sent_at":     time.Now(),
+		})
 	if res.Error != nil {
 		return fmt.Errorf("mysql: mark sent %q failed: %w", id, res.Error)
 	}
@@ -84,7 +88,7 @@ func (s *OutboxStore) Release(ctx context.Context, id, token, reason string) (in
 	}
 	attempts++
 	res := s.db.WithContext(ctx).Model(&OutboxMessagePO{}).
-		Where("id = ? AND claim_token = ?", id, token).
+		Where("id = ? AND claim_token = ? AND status = ?", id, token, outbox.StatusProcessing).
 		Updates(map[string]any{
 			"status":      outbox.StatusPending,
 			"claim_token": "",
@@ -103,7 +107,7 @@ func (s *OutboxStore) Release(ctx context.Context, id, token, reason string) (in
 // MoveToDeadLetter 在本 token 持有下转入死信，清空认领令牌。
 func (s *OutboxStore) MoveToDeadLetter(ctx context.Context, id, token, reason string) error {
 	res := s.db.WithContext(ctx).Model(&OutboxMessagePO{}).
-		Where("id = ? AND claim_token = ?", id, token).
+		Where("id = ? AND claim_token = ? AND status = ?", id, token, outbox.StatusProcessing).
 		Updates(map[string]any{
 			"status":      outbox.StatusDeadLetter,
 			"last_error":  reason,
@@ -177,7 +181,9 @@ func (s *OutboxStore) retryCount(ctx context.Context, id, token string) (int, bo
 		RetryCount int
 	}
 	err := s.db.WithContext(ctx).Model(&OutboxMessagePO{}).
-		Select("retry_count").Where("id = ? AND claim_token = ?", id, token).Take(&po).Error
+		Select("retry_count").
+		Where("id = ? AND claim_token = ? AND status = ?", id, token, outbox.StatusProcessing).
+		Take(&po).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return 0, false, nil
 	}

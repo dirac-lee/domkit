@@ -3,16 +3,24 @@ package outbox
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/dirac-lee/domkit/domain"
+)
+
+const (
+	defaultRelayInterval  = time.Second
+	defaultRelayBatchSize = 100
+	defaultRelayGrace     = time.Second
+	defaultRelayLease     = 30 * time.Second
 )
 
 // RelayConfig 补偿轮询器配置（对标 Java OutboxRelayConfig）。
 type RelayConfig struct {
 	// Interval 轮询间隔，Start 后台协程使用。
 	Interval time.Duration
-	// BatchSize 单轮最大认领条数，<=0 使用默认 100。
+	// BatchSize 单轮最大认领条数，0 使用默认 100。
 	BatchSize int
 	// Grace 新建消息宽限期：早于 now-grace 的 pending 消息才会被认领，
 	// 给事务后的即时发布路径留出窗口，避免重复投递。
@@ -22,6 +30,40 @@ type RelayConfig struct {
 	Lease time.Duration
 	// MaxRetry 最大发布次数（含首次）；<=0 表示无限重试。
 	MaxRetry int
+}
+
+// WithDefaults returns a copy of cfg with zero-valued optional fields filled.
+func (cfg RelayConfig) WithDefaults() RelayConfig {
+	if cfg.Interval == 0 {
+		cfg.Interval = defaultRelayInterval
+	}
+	if cfg.BatchSize == 0 {
+		cfg.BatchSize = defaultRelayBatchSize
+	}
+	if cfg.Grace == 0 {
+		cfg.Grace = defaultRelayGrace
+	}
+	if cfg.Lease == 0 {
+		cfg.Lease = defaultRelayLease
+	}
+	return cfg
+}
+
+// Validate checks whether cfg can be used to construct a Relay.
+func (cfg RelayConfig) Validate() error {
+	if cfg.Interval <= 0 {
+		return fmt.Errorf("outbox relay: interval must be positive, got %s", cfg.Interval)
+	}
+	if cfg.BatchSize <= 0 {
+		return fmt.Errorf("outbox relay: batch size must be positive, got %d", cfg.BatchSize)
+	}
+	if cfg.Grace < 0 {
+		return fmt.Errorf("outbox relay: grace must be non-negative, got %s", cfg.Grace)
+	}
+	if cfg.Lease <= 0 {
+		return fmt.Errorf("outbox relay: lease must be positive, got %s", cfg.Lease)
+	}
+	return nil
 }
 
 // Relay Outbox 补偿轮询器：定时原子认领 pending/租约过期消息并发布。
@@ -36,10 +78,11 @@ type Relay struct {
 	newToken func() string
 }
 
-// NewRelay 创建补偿轮询器。
-func NewRelay(store OutboxStore, pub EventPublisher, ser DomainEventSerializer, cfg RelayConfig) *Relay {
-	if cfg.BatchSize <= 0 {
-		cfg.BatchSize = 100
+// NewRelay creates a relay after applying defaults and validating the config.
+func NewRelay(store OutboxStore, pub EventPublisher, ser DomainEventSerializer, cfg RelayConfig) (*Relay, error) {
+	cfg = cfg.WithDefaults()
+	if err := cfg.Validate(); err != nil {
+		return nil, err
 	}
 	return &Relay{
 		store:      store,
@@ -47,7 +90,16 @@ func NewRelay(store OutboxStore, pub EventPublisher, ser DomainEventSerializer, 
 		serializer: ser,
 		cfg:        cfg,
 		newToken:   domain.NewEventID,
+	}, nil
+}
+
+// MustNewRelay creates a relay and panics if the config is invalid.
+func MustNewRelay(store OutboxStore, pub EventPublisher, ser DomainEventSerializer, cfg RelayConfig) *Relay {
+	relay, err := NewRelay(store, pub, ser, cfg)
+	if err != nil {
+		panic(err)
 	}
+	return relay
 }
 
 // Start 启动后台补偿协程，直到 ctx 取消。

@@ -194,7 +194,7 @@ func (markerPublisher) Publish(_ context.Context, evt domain.DomainEvent) error 
 }
 
 func testRelay(store OutboxStore, maxRetry int) *Relay {
-	r := NewRelay(store, markerPublisher{}, newTestSerializer(), RelayConfig{
+	r := MustNewRelay(store, markerPublisher{}, newTestSerializer(), RelayConfig{
 		Interval:  time.Second,
 		BatchSize: 100,
 		Grace:     time.Second,
@@ -203,6 +203,58 @@ func testRelay(store OutboxStore, maxRetry int) *Relay {
 	})
 	r.newToken = func() string { return "token" }
 	return r
+}
+
+func TestRelayConfigWithDefaults(t *testing.T) {
+	cfg := RelayConfig{}.WithDefaults()
+	if cfg.Interval != time.Second || cfg.BatchSize != 100 ||
+		cfg.Grace != time.Second || cfg.Lease != 30*time.Second {
+		t.Fatalf("unexpected defaults: %+v", cfg)
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("default config must be valid: %v", err)
+	}
+}
+
+func TestNewRelayRejectsInvalidConfig(t *testing.T) {
+	_, err := NewRelay(NewMemoryOutboxStore(), markerPublisher{}, newTestSerializer(), RelayConfig{
+		Interval: -time.Second,
+	})
+	if err == nil {
+		t.Fatal("expected invalid config error")
+	}
+}
+
+func TestMustNewRelayPanicsOnInvalidConfig(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Fatal("expected panic for invalid relay config")
+		}
+	}()
+	_ = MustNewRelay(NewMemoryOutboxStore(), markerPublisher{}, newTestSerializer(), RelayConfig{
+		Lease: -time.Second,
+	})
+}
+
+func TestRelayDefaultLeaseDoesNotImmediatelyReclaimProcessingMessage(t *testing.T) {
+	store := NewMemoryOutboxStore()
+	store.SetClock(func() time.Time { return fixedNow })
+	msg := seedMsg("m-processing", "a", 0, StatusProcessing, fixedNow.Add(-time.Minute))
+	msg.ClaimToken = "owner"
+	msg.ClaimedAt = fixedNow
+	if err := store.SaveMessage(context.Background(), "tx", msg); err != nil {
+		t.Fatal(err)
+	}
+
+	relay := MustNewRelay(store, markerPublisher{}, newTestSerializer(), RelayConfig{})
+	relay.newToken = func() string { return "new-owner" }
+	if err := relay.ScanPending(context.Background()); err != nil {
+		t.Fatalf("scan failed: %v", err)
+	}
+	got := store.Get("m-processing")
+	if got.ClaimToken != "owner" || got.Status != StatusProcessing {
+		t.Fatalf("processing message must stay with current owner, got %+v", got)
+	}
 }
 
 func seedMsg(id, aggKey string, retry int, status OutboxStatus, createdAt time.Time) *OutboxMessage {

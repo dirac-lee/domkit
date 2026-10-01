@@ -93,10 +93,11 @@ func (s *MemoryOutboxStore) MarkSent(_ context.Context, id, token string) error 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	m, ok := s.row[id]
-	if !ok || m.ClaimToken != token || (m.Status != StatusProcessing && m.Status != StatusPending) {
+	if !ok || m.ClaimToken != token || m.Status != StatusProcessing {
 		return ErrClaimLost
 	}
 	m.Status = StatusSent
+	m.ClaimToken = ""
 	m.SentAt = s.now()
 	return nil
 }
@@ -122,11 +123,12 @@ func (s *MemoryOutboxStore) MoveToDeadLetter(_ context.Context, id, token, reaso
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	m, ok := s.row[id]
-	if !ok || m.ClaimToken != token {
+	if !ok || m.ClaimToken != token || m.Status != StatusProcessing {
 		return ErrClaimLost
 	}
 	m.Status = StatusDeadLetter
 	m.LastError = reason
+	m.ClaimToken = ""
 	return nil
 }
 
