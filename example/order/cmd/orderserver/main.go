@@ -16,14 +16,13 @@ import (
 )
 
 func main() {
-	// 配置源：演示环境用内存 Map；真实环境可替换为 env / 配置中心实现（同 Source 接口）。
-	// 依赖本地 docker-compose 拉起的 MySQL(3306) 与 Redis(6379)。
+	// 配置源：环境变量优先，缺失时回退到本地 docker-compose 默认值，方便示例开箱即用。
 	src := config.NewMapSource().
-		Set("order.http-addr", ":8080").
-		Set("order.default-page-size", "20").
+		Set("order.http-addr", envOr("ORDER_HTTP_ADDR", ":8080")).
+		Set("order.default-page-size", envOr("ORDER_DEFAULT_PAGE_SIZE", "20")).
 		Set("order.mysql.dsn",
-			"order:order@tcp(127.0.0.1:3306)/order?charset=utf8mb4&parseTime=True&loc=Local").
-		Set("order.redis.addr", "127.0.0.1:6379")
+			envOr("ORDER_MYSQL_DSN", "order:order@tcp(127.0.0.1:3306)/order?charset=utf8mb4&parseTime=True&loc=Local")).
+		Set("order.redis.addr", envOr("ORDER_REDIS_ADDR", "127.0.0.1:6379"))
 	cfg := config.NewContext(src)
 
 	// 组合根：依据配置装配订单域全部进程级单例；失败直接终止（fail-fast）。
@@ -90,4 +89,11 @@ func runServer(server *http.Server) error {
 		log.Print("order server stopped")
 	}
 	return nil
+}
+
+func envOr(key, fallback string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return fallback
 }
