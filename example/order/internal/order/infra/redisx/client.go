@@ -5,9 +5,12 @@ package redisx
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 )
+
+const redisPingTimeout = 3 * time.Second
 
 // Client 包装 go-redis 客户端，对上层屏蔽具体 SDK。
 type Client struct {
@@ -22,7 +25,10 @@ func NewClient(addr, password string) (*Client, error) {
 		Password: password, // 无口令时传空串
 		DB:       0,
 	})
-	if err := rdb.Ping(context.Background()).Err(); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), redisPingTimeout)
+	defer cancel()
+	if err := rdb.Ping(ctx).Err(); err != nil {
+		_ = rdb.Close()
 		return nil, fmt.Errorf("redis: ping %q failed: %w", addr, err)
 	}
 	return &Client{rdb: rdb}, nil
