@@ -2,6 +2,9 @@ package order
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"slices"
 
 	"github.com/dirac-lee/domkit/application"
 	"github.com/dirac-lee/domkit/config"
@@ -32,6 +35,8 @@ type Application struct {
 	// SummaryCache / PayGuard 供入站层做详情缓存读取与重复支付拦截。
 	SummaryCache SummaryCache
 	PayGuard     PayGuard
+
+	closers []func() error
 }
 
 // orderDeps 装配内核所需的后端依赖（参数对象，避免过长参数列表）。
@@ -44,6 +49,7 @@ type orderDeps struct {
 	broadcast BroadcastStore     // 对外信使
 	cache     SummaryCache       // 详情缓存
 	payGuard  PayGuard           // 支付幂等守卫
+	closers   []func() error     // 进程退出时按逆序释放的资源
 }
 
 // NewApplication 订单域组合根（真实依赖）：进程启动调用一次。
@@ -65,19 +71,25 @@ func NewApplication(cfg *config.Context) (*Application, error) {
 	if err != nil {
 		return nil, err
 	}
+	closers := []func() error{
+		func() error { return mysql.Close(db) },
+	}
 	err = mysql.Migrate(db)
 	if err != nil {
+		_ = closeAll(closers)
 		return nil, err
 	}
 
 	// 真实 Redis：连接并探活。
 	redisClient, err := redisx.NewClient(options.RedisAddr, options.RedisPassword)
 	if err != nil {
+		_ = closeAll(closers)
 		return nil, err
 	}
+	closers = append(closers, redisClient.Close)
 
 	repo := mysql.NewOrderRepository(db)
-	return assembleApplication(options, orderDeps{
+	app, err := assembleApplication(options, orderDeps{
 		repo:      repo,
 		tm:        mysql.NewGormTxManager(db),
 		outbox:    mysql.NewOutboxStore(db),
@@ -85,7 +97,36 @@ func NewApplication(cfg *config.Context) (*Application, error) {
 		broadcast: mysql.NewBroadcastMessenger(db),
 		cache:     redisx.NewSummaryCache(redisClient, options.SummaryCacheTTL()),
 		payGuard:  redisx.NewPayIdempotencyGuard(redisClient, options.PayIdempotencyTTL()),
+		closers:   closers,
 	})
+	if err != nil {
+		if closeErr := closeAll(closers); closeErr != nil {
+			return nil, errors.Join(err, closeErr)
+		}
+		return nil, err
+	}
+	return app, nil
+}
+
+// Close 释放订单应用装配时持有的进程级资源。
+func (a *Application) Close() error {
+	if a == nil {
+		return nil
+	}
+	return closeAll(a.closers)
+}
+
+func closeAll(closers []func() error) error {
+	var err error
+	for i, closer := range slices.Backward(closers) {
+		if closer == nil {
+			continue
+		}
+		if closeErr := closer(); closeErr != nil {
+			err = errors.Join(err, fmt.Errorf("order: close resource %d failed: %w", i, closeErr))
+		}
+	}
+	return err
 }
 
 // assembleApplication 后端无关的装配内核：订阅事件、构造 outbox 与用例。
@@ -136,6 +177,7 @@ func assembleApplication(options *Options, deps orderDeps) (*Application, error)
 		Broadcasts:   deps.broadcast,
 		SummaryCache: deps.cache,
 		PayGuard:     deps.payGuard,
+		closers:      deps.closers,
 	}, nil
 }
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"os"
 	"os/signal"
 	"syscall"
 	"time"
@@ -42,10 +43,22 @@ func main() {
 	}
 
 	log.Printf("order server listening on %s", server.Addr)
-	runServer(server)
+	runErr := runServer(server)
+	closeErr := app.Close()
+	if runErr != nil {
+		if closeErr != nil {
+			log.Printf("close order application failed: %v", closeErr)
+		}
+		log.Printf("order server failed: %v", runErr)
+		os.Exit(1)
+	}
+	if closeErr != nil {
+		log.Printf("close order application failed: %v", closeErr)
+		os.Exit(1)
+	}
 }
 
-func runServer(server *http.Server) {
+func runServer(server *http.Server) error {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
@@ -62,18 +75,19 @@ func runServer(server *http.Server) {
 	select {
 	case err := <-errCh:
 		if err != nil {
-			log.Fatalf("order server failed: %v", err)
+			return err
 		}
 	case <-ctx.Done():
 		log.Print("order server shutting down")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := server.Shutdown(shutdownCtx); err != nil {
-			log.Fatalf("order server shutdown failed: %v", err)
+			return err
 		}
 		if err := <-errCh; err != nil {
-			log.Fatalf("order server stopped with error: %v", err)
+			return err
 		}
 		log.Print("order server stopped")
 	}
+	return nil
 }

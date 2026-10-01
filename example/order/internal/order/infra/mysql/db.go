@@ -33,6 +33,18 @@ func Open(dsn string) (*gorm.DB, error) {
 	return db, nil
 }
 
+// Close 关闭 GORM 底层 sql.DB 连接池。
+func Close(db *gorm.DB) error {
+	sqlDB, err := db.DB()
+	if err != nil {
+		return fmt.Errorf("mysql: obtain sql.DB failed: %w", err)
+	}
+	if err := sqlDB.Close(); err != nil {
+		return fmt.Errorf("mysql: close sql.DB failed: %w", err)
+	}
+	return nil
+}
+
 // Migrate 依据 PO 自动建表/补列。
 // 仅用于示例快速起步；生产环境建议改用版本化迁移工具（如 golang-migrate）。
 func Migrate(db *gorm.DB) error {

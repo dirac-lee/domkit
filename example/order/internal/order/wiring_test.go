@@ -2,6 +2,7 @@ package order
 
 import (
 	"context"
+	"errors"
 	"testing"
 
 	"github.com/dirac-lee/domkit/application"
@@ -42,6 +43,54 @@ func newTestApplication(t *testing.T) *Application {
 // newMemoryOrderRepo 创建内存订单仓储。
 func newMemoryOrderRepo() *persist.MemoryRepository[orderdomain.OrderID, orderdomain.Order] {
 	return persist.NewAggregateRepository(func(o *orderdomain.Order) orderdomain.OrderID { return o.ID })
+}
+
+func TestApplicationCloseReleasesResourcesInReverseOrder(t *testing.T) {
+	var calls []string
+	app := &Application{closers: []func() error{
+		func() error {
+			calls = append(calls, "mysql")
+			return nil
+		},
+		func() error {
+			calls = append(calls, "redis")
+			return nil
+		},
+	}}
+
+	if err := app.Close(); err != nil {
+		t.Fatalf("Close() unexpected error: %v", err)
+	}
+	want := []string{"redis", "mysql"}
+	if len(calls) != len(want) {
+		t.Fatalf("Close() calls = %v, want %v", calls, want)
+	}
+	for i := range want {
+		if calls[i] != want[i] {
+			t.Fatalf("Close() calls = %v, want %v", calls, want)
+		}
+	}
+}
+
+func TestApplicationCloseJoinsResourceErrors(t *testing.T) {
+	errMySQL := errors.New("mysql close")
+	errRedis := errors.New("redis close")
+	app := &Application{closers: []func() error{
+		func() error { return errMySQL },
+		func() error { return errRedis },
+	}}
+
+	err := app.Close()
+	if !errors.Is(err, errMySQL) || !errors.Is(err, errRedis) {
+		t.Fatalf("Close() error = %v, want joined mysql and redis errors", err)
+	}
+}
+
+func TestApplicationCloseNilApp(t *testing.T) {
+	var app *Application
+	if err := app.Close(); err != nil {
+		t.Fatalf("Close() nil app error = %v, want nil", err)
+	}
 }
 
 // memorySummaryStore 把框架内存副本适配为带 error 的读侧契约。
