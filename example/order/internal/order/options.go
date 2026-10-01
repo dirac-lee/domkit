@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/dirac-lee/domkit/infra/outbox"
 	"github.com/dirac-lee/domkit/readmodel"
 )
 
@@ -24,6 +25,16 @@ type Options struct {
 	SummaryCacheTTLSec int `config:"cache.summary-ttl,default=30"`
 	// PayIdempotencyTTLSec 支付幂等锁 TTL（秒）。
 	PayIdempotencyTTLSec int `config:"idempotency.pay-ttl,default=300"`
+	// RelayIntervalSec Outbox 补偿轮询间隔（秒），0 使用框架默认值。
+	RelayIntervalSec int `config:"outbox.relay-interval-sec,default=1"`
+	// RelayBatchSize Outbox 单轮认领数量，0 使用框架默认值。
+	RelayBatchSize int `config:"outbox.relay-batch-size,default=100"`
+	// RelayGraceSec Outbox 新消息宽限期（秒），应大于提交后即时发布超时。
+	RelayGraceSec int `config:"outbox.relay-grace-sec,default=5"`
+	// RelayLeaseSec Outbox 认领租约（秒），0 使用框架默认值。
+	RelayLeaseSec int `config:"outbox.relay-lease-sec,default=30"`
+	// RelayMaxRetry Outbox 最大发布次数，<=0 表示无限重试。
+	RelayMaxRetry int `config:"outbox.relay-max-retry,default=10"`
 }
 
 // Validate 校验启动期即可确定的配置，避免错误配置拖到请求处理阶段才暴露。
@@ -37,6 +48,9 @@ func (o *Options) Validate() error {
 	if o.PayIdempotencyTTLSec <= 0 {
 		return fmt.Errorf("order: idempotency.pay-ttl must be positive, got %d", o.PayIdempotencyTTLSec)
 	}
+	if err := o.RelayConfig().WithDefaults().Validate(); err != nil {
+		return fmt.Errorf("order: invalid outbox relay config: %w", err)
+	}
 	return nil
 }
 
@@ -48,4 +62,15 @@ func (o *Options) SummaryCacheTTL() time.Duration {
 // PayIdempotencyTTL 返回支付幂等锁 TTL。
 func (o *Options) PayIdempotencyTTL() time.Duration {
 	return time.Duration(o.PayIdempotencyTTLSec) * time.Second
+}
+
+// RelayConfig 返回 Outbox Relay 配置；0 值字段交由框架默认值兜底。
+func (o *Options) RelayConfig() outbox.RelayConfig {
+	return outbox.RelayConfig{
+		Interval:  time.Duration(o.RelayIntervalSec) * time.Second,
+		BatchSize: o.RelayBatchSize,
+		Grace:     time.Duration(o.RelayGraceSec) * time.Second,
+		Lease:     time.Duration(o.RelayLeaseSec) * time.Second,
+		MaxRetry:  o.RelayMaxRetry,
+	}
 }

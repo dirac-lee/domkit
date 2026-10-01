@@ -364,7 +364,7 @@ example/order/                       # 独立子 module（go.mod），第三方�
 - 真实持久化：订单写模型经 GORM 落 MySQL `orders` 表，更新按 `version` 乐观锁；单测装配换内存仓储，领域与应用代码不变。
 - 写 → 读实时投影：订阅订单事件把聚合同步到 MySQL `order_summaries`；详情经 Redis 概要缓存（cache-aside，写后失效），列表分页只读读侧投影。
 - 支付幂等：支付入口先经 Redis `SET NX EX` 守卫拦截时间窗口内的重复请求；业务失败主动释放，成功保留至 TTL 过期。
-- 事务发件箱：领域事件与订单写在同一事务落 `outbox_messages`，提交后即时同步分发——成功置 `sent`、失败保留 `pending`、反序列化失败转 `deadletter`。
+- 事务发件箱：领域事件与订单写在同一事务落 `outbox_messages`，提交后即时同步分发；即时失败保留 `pending`，后台 Relay 定时补偿发布，反序列化失败转 `deadletter`。
 - 预授权：支付经端口 [`PaymentAuthorizer`](example/order/internal/order/port/payment.go) 与 ACL 先查后写实现，**重复调用返回同一 `preAuthId` 且 `reused:true`**。
 - 对账自愈：模拟读侧条目丢失后对账检测为 STALE 并立即重建（见 `reconciliation_test.go`）。
 - 出域广播：支付后订阅 `order.paid`，组装「订单已支付」信封，经 MySQL `broadcast_records` 留痕（见 `broadcast_test.go`）。
@@ -424,6 +424,11 @@ example/order/                       # 独立子 module（go.mod），第三方�
 | `order.redis.password` | Redis 密码（默认空） | 否 |
 | `order.cache.summary-ttl` | 概要缓存 TTL，秒（默认 30） | 否 |
 | `order.idempotency.pay-ttl` | 支付幂等锁 TTL，秒（默认 300） | 否 |
+| `order.outbox.relay-interval-sec` | Outbox Relay 轮询间隔，秒（默认 1） | 否 |
+| `order.outbox.relay-batch-size` | Outbox Relay 单轮最大认领条数（默认 100） | 否 |
+| `order.outbox.relay-grace-sec` | 新建 outbox 消息宽限期，秒（默认 5） | 否 |
+| `order.outbox.relay-lease-sec` | processing 消息认领租约，秒（默认 30） | 否 |
+| `order.outbox.relay-max-retry` | 最大发布次数（默认 10，<=0 表示无限重试） | 否 |
 
 ---
 

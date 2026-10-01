@@ -93,6 +93,13 @@ func TestApplicationCloseNilApp(t *testing.T) {
 	}
 }
 
+func TestAssembleApplicationCreatesRelay(t *testing.T) {
+	app := newTestApplication(t)
+	if app.Relay == nil {
+		t.Fatal("Relay is nil, want outbox relay to be assembled")
+	}
+}
+
 // memorySummaryStore 把框架内存副本适配为带 error 的读侧契约。
 type memorySummaryStore struct {
 	*readmodel.MemoryReplica[orderdomain.OrderID, orderdomain.OrderSummary]

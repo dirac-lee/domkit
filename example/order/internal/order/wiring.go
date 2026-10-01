@@ -31,6 +31,7 @@ type Application struct {
 	Repo       domain.Repository[orderdomain.OrderID, orderdomain.Order]
 	ReadModel  OrderSummaryStore
 	Reconciler *reconciliation.Manager[orderdomain.OrderID]
+	Relay      *outbox.Relay
 	Broadcasts BroadcastStore
 	// SummaryCache / PayGuard 供入站层做详情缓存读取与重复支付拦截。
 	SummaryCache SummaryCache
@@ -154,7 +155,13 @@ func assembleApplication(options *Options, deps orderDeps) (*Application, error)
 
 	// 3. outbox：序列化器 + 即时发布装饰（发布目标为进程内 bus）。
 	serializer := newOrderEventSerializer()
-	store := newInstantOutboxStore(deps.outbox, serializer, eventBusPublisher{bus: bus})
+	publisher := eventBusPublisher{bus: bus}
+	store := newInstantOutboxStore(deps.outbox, serializer, publisher)
+
+	relay, err := outbox.NewRelay(deps.outbox, publisher, serializer, options.RelayConfig())
+	if err != nil {
+		return nil, err
+	}
 
 	// 4. 事务命令服务：聚合与 outbox 同事务落库，提交成功后即时发布事件。
 	newUoW := func(tx any) domain.UnitOfWork {
@@ -174,6 +181,7 @@ func assembleApplication(options *Options, deps orderDeps) (*Application, error)
 		Repo:         deps.repo,
 		ReadModel:    deps.summary,
 		Reconciler:   reconciliation.NewManager(deps.repo).RegisterReplica(deps.summary),
+		Relay:        relay,
 		Broadcasts:   deps.broadcast,
 		SummaryCache: deps.cache,
 		PayGuard:     deps.payGuard,

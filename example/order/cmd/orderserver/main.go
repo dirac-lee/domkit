@@ -22,7 +22,12 @@ func main() {
 		Set("order.default-page-size", envOr("ORDER_DEFAULT_PAGE_SIZE", "20")).
 		Set("order.mysql.dsn",
 			envOr("ORDER_MYSQL_DSN", "order:order@tcp(127.0.0.1:3306)/order?charset=utf8mb4&parseTime=True&loc=Local")).
-		Set("order.redis.addr", envOr("ORDER_REDIS_ADDR", "127.0.0.1:6379"))
+		Set("order.redis.addr", envOr("ORDER_REDIS_ADDR", "127.0.0.1:6379")).
+		Set("order.outbox.relay-interval-sec", envOr("ORDER_OUTBOX_RELAY_INTERVAL_SEC", "1")).
+		Set("order.outbox.relay-batch-size", envOr("ORDER_OUTBOX_RELAY_BATCH_SIZE", "100")).
+		Set("order.outbox.relay-grace-sec", envOr("ORDER_OUTBOX_RELAY_GRACE_SEC", "5")).
+		Set("order.outbox.relay-lease-sec", envOr("ORDER_OUTBOX_RELAY_LEASE_SEC", "30")).
+		Set("order.outbox.relay-max-retry", envOr("ORDER_OUTBOX_RELAY_MAX_RETRY", "10"))
 	cfg := config.NewContext(src)
 
 	// 组合根：依据配置装配订单域全部进程级单例；失败直接终止（fail-fast）。
@@ -41,8 +46,15 @@ func main() {
 		IdleTimeout:       60 * time.Second,
 	}
 
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	relayDone := startRelay(ctx, app)
+
 	log.Printf("order server listening on %s", server.Addr)
-	runErr := runServer(server)
+	runErr := runServer(ctx, server)
+	stop()
+	<-relayDone
 	closeErr := app.Close()
 	if runErr != nil {
 		if closeErr != nil {
@@ -57,10 +69,7 @@ func main() {
 	}
 }
 
-func runServer(server *http.Server) error {
-	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-
+func runServer(ctx context.Context, server *http.Server) error {
 	errCh := make(chan error, 1)
 	go func() {
 		// ListenAndServe 在 Shutdown 后会返回 ErrServerClosed，这是正常退出路径。
@@ -89,6 +98,20 @@ func runServer(server *http.Server) error {
 		log.Print("order server stopped")
 	}
 	return nil
+}
+
+func startRelay(ctx context.Context, app *order.Application) <-chan struct{} {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if app == nil || app.Relay == nil {
+			return
+		}
+		log.Print("order outbox relay started")
+		app.Relay.Start(ctx)
+		log.Print("order outbox relay stopped")
+	}()
+	return done
 }
 
 func envOr(key, fallback string) string {

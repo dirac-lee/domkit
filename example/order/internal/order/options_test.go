@@ -32,6 +32,38 @@ func TestOptionsValidate(t *testing.T) {
 			options: Options{DefaultPageSize: 20, SummaryCacheTTLSec: 30, PayIdempotencyTTLSec: -1},
 			wantErr: true,
 		},
+		{
+			name: "relay interval negative",
+			options: Options{
+				DefaultPageSize: 20, SummaryCacheTTLSec: 30, PayIdempotencyTTLSec: 300,
+				RelayIntervalSec: -1,
+			},
+			wantErr: true,
+		},
+		{
+			name: "relay batch size negative",
+			options: Options{
+				DefaultPageSize: 20, SummaryCacheTTLSec: 30, PayIdempotencyTTLSec: 300,
+				RelayBatchSize: -1,
+			},
+			wantErr: true,
+		},
+		{
+			name: "relay grace negative",
+			options: Options{
+				DefaultPageSize: 20, SummaryCacheTTLSec: 30, PayIdempotencyTTLSec: 300,
+				RelayGraceSec: -1,
+			},
+			wantErr: true,
+		},
+		{
+			name: "relay lease negative",
+			options: Options{
+				DefaultPageSize: 20, SummaryCacheTTLSec: 30, PayIdempotencyTTLSec: 300,
+				RelayLeaseSec: -1,
+			},
+			wantErr: true,
+		},
 	}
 
 	for _, tt := range tests {
