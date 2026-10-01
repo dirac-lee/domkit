@@ -38,12 +38,13 @@ func (s *OutboxStore) SaveMessage(ctx context.Context, tx any, msg *outbox.Outbo
 
 // ClaimPending 认领一批待发消息（Relay 兜底路径，独立短事务、不含发送动作）。
 //
-// 说明：这里采用「选出候选 → 按 token 批量翻转 → 按 token 重查」实现，
-// 在单实例 Relay 下严格正确；多实例并发抢同一批时，最终以 claim_token 归属为准，
-// 消费端按 at-least-once 幂等兜底。生产多实例可改为逐条 UPDATE ... LIMIT 行级认领。
+// 说明：这里采用「选出候选 → 带完整状态条件翻转 → 按 token 重查」实现。
+// 第二步 UPDATE 会重新校验 pending 宽限期与 processing 租约，避免并发 Relay
+// 覆盖其他实例刚抢到且仍在租约内的 claim token。
 func (s *OutboxStore) ClaimPending(ctx context.Context, batchSize int,
 	grace, lease time.Duration, token string) ([]*outbox.OutboxMessage, error) {
-	candidates, err := s.selectCandidates(ctx, batchSize, grace, lease)
+	now := time.Now()
+	candidates, err := s.selectCandidates(ctx, batchSize, grace, lease, now)
 	if err != nil || len(candidates) == 0 {
 		return nil, err
 	}
@@ -52,10 +53,10 @@ func (s *OutboxStore) ClaimPending(ctx context.Context, batchSize int,
 	for i := range candidates {
 		ids = append(ids, candidates[i].ID)
 	}
-	if err := s.flashClaim(ctx, ids, token, time.Now()); err != nil {
+	if err := s.flashClaim(ctx, ids, token, now, grace, lease); err != nil {
 		return nil, err
 	}
-	return s.claimedByToken(ctx, token)
+	return s.claimedByToken(ctx, ids, token)
 }
 
 // MarkSent 在本 token 持有下置为 sent；丢失认领返回 ErrClaimLost。
@@ -121,8 +122,7 @@ func (s *OutboxStore) MoveToDeadLetter(ctx context.Context, id, token, reason st
 
 // selectCandidates 选出候选：pending 已过宽限期，或 processing 租约已过期。
 func (s *OutboxStore) selectCandidates(ctx context.Context, batchSize int,
-	grace, lease time.Duration) ([]OutboxMessagePO, error) {
-	now := time.Now()
+	grace, lease time.Duration, now time.Time) ([]OutboxMessagePO, error) {
 	var candidates []OutboxMessagePO
 	err := s.db.WithContext(ctx).
 		Where("status = ? AND created_at < ?", outbox.StatusPending, now.Add(-grace)).
@@ -135,10 +135,15 @@ func (s *OutboxStore) selectCandidates(ctx context.Context, batchSize int,
 }
 
 // flashClaim 把候选行批量翻转为 processing 并打上本 token。
-func (s *OutboxStore) flashClaim(ctx context.Context, ids []string, token string, now time.Time) error {
+// 注意这里必须再次校验候选条件：select 与 update 之间可能已有其他 Relay 抢占成功。
+func (s *OutboxStore) flashClaim(ctx context.Context, ids []string, token string,
+	now time.Time, grace, lease time.Duration) error {
+	eligible := s.db.
+		Where("status = ? AND created_at < ?", outbox.StatusPending, now.Add(-grace)).
+		Or("status = ? AND claimed_at < ?", outbox.StatusProcessing, now.Add(-lease))
 	err := s.db.WithContext(ctx).Model(&OutboxMessagePO{}).
-		Where("id IN ? AND status IN ?", ids,
-			[]string{string(outbox.StatusPending), string(outbox.StatusProcessing)}).
+		Where("id IN ?", ids).
+		Where(eligible).
 		Updates(map[string]any{
 			"status":      outbox.StatusProcessing,
 			"claim_token": token,
@@ -150,11 +155,11 @@ func (s *OutboxStore) flashClaim(ctx context.Context, ids []string, token string
 	return nil
 }
 
-// claimedByToken 重查本 token 真正抢中的行，CreatedAt 升序返回。
-func (s *OutboxStore) claimedByToken(ctx context.Context, token string) ([]*outbox.OutboxMessage, error) {
+// claimedByToken 重查本次候选中由 token 真正抢中的行，CreatedAt 升序返回。
+func (s *OutboxStore) claimedByToken(ctx context.Context, ids []string, token string) ([]*outbox.OutboxMessage, error) {
 	var pos []OutboxMessagePO
 	err := s.db.WithContext(ctx).
-		Where("claim_token = ? AND status = ?", token, outbox.StatusProcessing).
+		Where("id IN ? AND claim_token = ? AND status = ?", ids, token, outbox.StatusProcessing).
 		Order("created_at").Find(&pos).Error
 	if err != nil {
 		return nil, fmt.Errorf("mysql: reload claimed messages failed: %w", err)
